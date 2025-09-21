@@ -1,21 +1,19 @@
 # OrthoPulse Pro 🦴
 
-OrthoPulse Pro is a **premium orthopedic procedure tracker** for hospitals and technical teams.  
+**OrthoPulse Pro** is a high-end, interactive orthopedic procedure tracking dashboard built with Streamlit. It provides:
 
-## Features
+- Metrics, trends, and leaderboards for surgeons, staff, and hospitals
+- Forecasting of procedures for the next 7 days
+- Dynamic filters and role-based access (Admin / Staff)
+- Add new procedures with form submission
+- Reports export as CSV or PDF
+- Random test data generator (from January to today)
 
-- Real-time **Metrics**: total cases, active surgeons, staff coverage  
-- **Trends & Forecasts**: last 30 days trends with predictive analytics  
-- **Leaderboards**: Surgeons, Staff, Hospitals  
-- **Reports**: full report table with CSV & PDF download  
-- **Add Procedure**: dynamic procedure entry  
-- **Interactive Charts**: Plotly charts, mobile-friendly  
-- **Advanced Sidebar Filters**: date range, region, hospital, staff, surgeons, procedure type  
+---
 
-## Installation
+## **Installation**
 
+1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/OrthoPulse-Pro.git
-cd OrthoPulse-Pro
-pip install -r requirements.txt
-streamlit run app.py
+git clone https://github.com/yourusername/OrthoPulsePro.git
+cd OrthoPulsePro
