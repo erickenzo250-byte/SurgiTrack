@@ -15,24 +15,8 @@ import random
 st.set_page_config(
     page_title="OrthoPulse Pro 🦴",
     page_icon="🩺",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
-
-# ---------------------------
-# Tab Hover Pop-up Effect
-# ---------------------------
-st.markdown("""
-<style>
-.css-1aumxhk {
-    transition: all 0.3s ease;
-}
-.css-1aumxhk:hover {
-    transform: scale(1.05);
-    background-color: #f0f8ff !important;
-}
-</style>
-""", unsafe_allow_html=True)
 
 st.markdown("<h1 style='text-align:center; color:#4B0082'>OrthoPulse Pro 🦴 Dashboard</h1>", unsafe_allow_html=True)
 
@@ -90,35 +74,32 @@ df_all = pd.read_sql_query("SELECT * FROM procedures", conn)
 if df_all.empty:
     generate_random_procedures(200)
     df_all = pd.read_sql_query("SELECT * FROM procedures", conn)
+
 df_all["Date"] = pd.to_datetime(df_all["date"])
 
 # ---------------------------
-# Sidebar (High-End)
+# Sidebar
 # ---------------------------
 st.sidebar.header("👩‍⚕️ OrthoPulse Sidebar")
-
-# Role Section
 with st.sidebar.expander("User Role"):
     role = st.radio("Select Role", ["Admin", "Staff"])
     staff_name = st.text_input("Enter Your Name") if role == "Staff" else ""
 
-# Filters Section
 with st.sidebar.expander("Filters 🔍"):
     min_date = df_all['Date'].min()
     max_date = df_all['Date'].max()
-    date_range = st.date_input("Date Range", [min_date, max_date], help="Select the date range for analysis")
+    date_range = st.date_input("Date Range", [min_date, max_date])
     regions = ["All"] + sorted(df_all['region'].dropna().unique().tolist())
-    selected_region = st.selectbox("Region", regions, help="Choose region or All")
+    selected_region = st.selectbox("Region", regions)
     hospitals = ["All"] + sorted(df_all['hospital'].dropna().unique().tolist())
-    selected_hospital = st.selectbox("Hospital", hospitals, help="Filter by hospital or All")
+    selected_hospital = st.selectbox("Hospital", hospitals)
     procedures = ["All"] + sorted(df_all['procedure'].dropna().unique().tolist())
-    selected_procedure = st.selectbox("Procedure", procedures, help="Filter by procedure type or All")
+    selected_procedure = st.selectbox("Procedure", procedures)
     surgeons = ["All"] + sorted(df_all['surgeon'].dropna().unique().tolist())
-    selected_surgeon = st.selectbox("Surgeon", surgeons, help="Filter by surgeon or All")
+    selected_surgeon = st.selectbox("Surgeon", surgeons)
     staff_filter = ["All"] + sorted(set(",".join(df_all['staff'].dropna()).split(", ")))
-    selected_staff = st.selectbox("Staff", staff_filter, help="Filter by staff member or All")
+    selected_staff = st.selectbox("Staff", staff_filter)
 
-# Quick Actions Section
 with st.sidebar.expander("Quick Actions ⚡"):
     if st.button("Generate Random Test Data"):
         generate_random_procedures(100)
@@ -130,21 +111,20 @@ with st.sidebar.expander("Quick Actions ⚡"):
 # Data Filtering
 # ---------------------------
 df_filtered = df_all.copy()
-if not df_filtered.empty:
-    df_filtered = df_filtered[(df_filtered['Date'] >= pd.to_datetime(date_range[0])) &
-                              (df_filtered['Date'] <= pd.to_datetime(date_range[1]))]
-    if selected_region != "All":
-        df_filtered = df_filtered[df_filtered['region'] == selected_region]
-    if selected_hospital != "All":
-        df_filtered = df_filtered[df_filtered['hospital'] == selected_hospital]
-    if selected_procedure != "All":
-        df_filtered = df_filtered[df_filtered['procedure'] == selected_procedure]
-    if selected_surgeon != "All":
-        df_filtered = df_filtered[df_filtered['surgeon'] == selected_surgeon]
-    if role == "Staff" and staff_name:
-        df_filtered = df_filtered[df_filtered['staff'].str.contains(staff_name, case=False, na=False)]
-    elif selected_staff != "All":
-        df_filtered = df_filtered[df_filtered['staff'].str.contains(selected_staff, case=False, na=False)]
+df_filtered = df_filtered[(df_filtered['Date'] >= pd.to_datetime(date_range[0])) &
+                          (df_filtered['Date'] <= pd.to_datetime(date_range[1]))]
+if selected_region != "All":
+    df_filtered = df_filtered[df_filtered['region'] == selected_region]
+if selected_hospital != "All":
+    df_filtered = df_filtered[df_filtered['hospital'] == selected_hospital]
+if selected_procedure != "All":
+    df_filtered = df_filtered[df_filtered['procedure'] == selected_procedure]
+if selected_surgeon != "All":
+    df_filtered = df_filtered[df_filtered['surgeon'] == selected_surgeon]
+if role == "Staff" and staff_name:
+    df_filtered = df_filtered[df_filtered['staff'].str.contains(staff_name, case=False, na=False)]
+elif selected_staff != "All":
+    df_filtered = df_filtered[df_filtered['staff'].str.contains(selected_staff, case=False, na=False)]
 
 # ---------------------------
 # Tabs
