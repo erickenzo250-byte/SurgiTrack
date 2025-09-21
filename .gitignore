@@ -1,11 +1,5 @@
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.env
-.venv/
-venv/
 database.db
 .DS_Store
-*.csv
-*.pdf
+.env
