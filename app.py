@@ -43,11 +43,11 @@ def generate_random_procedures(num_records=200):
     surgeons = ["Dr. Mwangi", "Dr. Kimani", "Dr. Ochieng", "Dr. Wanjiru", "Dr. Njoroge"]
     staff_members = ["Alice", "Bob", "Charles", "Diana", "Eunice", "Francis"]
 
-    data = []
     start_date = datetime(datetime.today().year, 1, 1)
     end_date = datetime.today()
     delta_days = (end_date - start_date).days
 
+    data = []
     for _ in range(num_records):
         date = start_date + timedelta(days=random.randint(0, delta_days))
         hospital = random.choice(hospitals)
@@ -58,7 +58,10 @@ def generate_random_procedures(num_records=200):
         notes = "Routine procedure"
         data.append((date.strftime("%Y-%m-%d"), region, hospital, procedure, surgeon, staff, notes))
 
-    c.executemany('INSERT INTO procedures (date, region, hospital, procedure, surgeon, staff, notes) VALUES (?, ?, ?, ?, ?, ?, ?)', data)
+    c.executemany(
+        'INSERT INTO procedures (date, region, hospital, procedure, surgeon, staff, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        data
+    )
     conn.commit()
     st.success(f"✅ Generated {num_records} random procedures from January.")
 
@@ -148,20 +151,22 @@ with tabs[1]:
         st.plotly_chart(fig_line, use_container_width=True)
 
 # ---------------------------
-# Linear Trend Tab (From January)
+# Linear Trend Tab (Monthly, Total Surgeries)
 # ---------------------------
 with tabs[2]:
-    st.markdown("### 📊 Linear Trend (From Jan 1)")
+    st.markdown("### 📊 Linear Trend: Total Surgeries from Jan to Now")
     if not df_filtered.empty:
-        df_trend = df_filtered.groupby(pd.Grouper(key="Date", freq="D")).size().reset_index(name="Procedures").sort_values("Date")
-        df_trend['day_num'] = np.arange(len(df_trend))
-        X = df_trend[['day_num']]
-        y = df_trend['Procedures']
+        df_monthly = df_filtered.groupby(pd.Grouper(key="Date", freq="M")).size().reset_index(name="Total Procedures")
+        df_monthly = df_monthly.sort_values("Date")
+        df_monthly['month_num'] = np.arange(len(df_monthly))
+        X = df_monthly[['month_num']]
+        y = df_monthly['Total Procedures']
         model = LinearRegression().fit(X, y)
-        df_trend['Trend'] = model.predict(X)
+        df_monthly['Trend'] = model.predict(X)
 
-        fig_trend = px.line(df_trend, x="Date", y="Procedures", markers=True, color_discrete_sequence=["#1E90FF"])
-        fig_trend.add_scatter(x=df_trend['Date'], y=df_trend['Trend'], mode='lines', name='Linear Trend', line=dict(color='red', dash='dash'))
+        fig_trend = px.line(df_monthly, x="Date", y="Total Procedures", markers=True, color_discrete_sequence=["#1E90FF"])
+        fig_trend.add_scatter(x=df_monthly['Date'], y=df_monthly['Trend'], mode='lines',
+                              name='Linear Trend', line=dict(color='red', dash='dash'))
         st.plotly_chart(fig_trend, use_container_width=True)
 
 # ---------------------------
@@ -173,7 +178,8 @@ with tabs[3]:
         # Surgeons
         lb_surgeons = df_filtered['surgeon'].value_counts().reset_index()
         lb_surgeons.columns = ['Surgeon', 'Procedures Done']
-        fig_surgeon = px.bar(lb_surgeons, x='Surgeon', y='Procedures Done', color='Procedures Done', color_continuous_scale=px.colors.sequential.Viridis)
+        fig_surgeon = px.bar(lb_surgeons, x='Surgeon', y='Procedures Done', color='Procedures Done',
+                             color_continuous_scale=px.colors.sequential.Viridis)
         st.plotly_chart(fig_surgeon, use_container_width=True)
         st.success(f"🏅 Top Surgeon: {lb_surgeons.iloc[0]['Surgeon']}")
 
@@ -181,26 +187,27 @@ with tabs[3]:
         staff_series = df_filtered['staff'].str.split(",").explode().str.strip().dropna()
         lb_staff = staff_series.value_counts().reset_index()
         lb_staff.columns = ["Staff", "Appearances"]
-        fig_staff = px.bar(lb_staff, x="Staff", y="Appearances", color="Appearances", color_continuous_scale=px.colors.sequential.Plasma)
+        fig_staff = px.bar(lb_staff, x="Staff", y="Appearances", color="Appearances",
+                           color_continuous_scale=px.colors.sequential.Plasma)
         st.plotly_chart(fig_staff, use_container_width=True)
         st.success(f"🏅 Top Staff: {lb_staff.iloc[0]['Staff']}")
 
         # Hospitals
         lb_hospitals = df_filtered['hospital'].value_counts().reset_index()
         lb_hospitals.columns = ["Hospital", "Procedures"]
-        fig_hosp = px.bar(lb_hospitals, x="Hospital", y="Procedures", color="Procedures", color_continuous_scale=px.colors.sequential.Aggrnyl)
+        fig_hosp = px.bar(lb_hospitals, x="Hospital", y="Procedures", color="Procedures",
+                          color_continuous_scale=px.colors.sequential.Aggrnyl)
         st.plotly_chart(fig_hosp, use_container_width=True)
         st.success(f"🏅 Top Hospital: {lb_hospitals.iloc[0]['Hospital']}")
 
 # ---------------------------
-# Reports Tab (CSV + PDF)
+# Reports Tab
 # ---------------------------
 with tabs[4]:
     st.markdown("### 📄 Reports")
     if not df_filtered.empty:
         csv = df_filtered.to_csv(index=False).encode('utf-8')
         st.download_button("Download CSV", csv, "report.csv", "text/csv")
-        # PDF
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer)
         pdf.drawString(100, 800, "OrthoPulse Pro Report")
