@@ -75,9 +75,9 @@ if df_all.empty:
 df_all["Date"] = pd.to_datetime(df_all["date"], errors='coerce')
 
 # ---------------------------
-# Sidebar
+# Sidebar Filters
 # ---------------------------
-st.sidebar.header("👩‍⚕️ Sidebar")
+st.sidebar.header("👩‍⚕️ Filters & Actions")
 role = st.sidebar.radio("Select Role", ["Admin", "Staff"])
 staff_name = st.sidebar.text_input("Staff Name") if role=="Staff" else ""
 
@@ -151,7 +151,7 @@ with tabs[1]:
         st.plotly_chart(fig_line, use_container_width=True)
 
 # ---------------------------
-# Linear Trend Tab (Monthly, Total Surgeries)
+# Linear Trend Tab
 # ---------------------------
 with tabs[2]:
     st.markdown("### 📊 Linear Trend: Total Surgeries from Jan to Now")
@@ -175,7 +175,6 @@ with tabs[2]:
 with tabs[3]:
     st.markdown("### 🏆 Leaderboards")
     if not df_filtered.empty:
-        # Surgeons
         lb_surgeons = df_filtered['surgeon'].value_counts().reset_index()
         lb_surgeons.columns = ['Surgeon', 'Procedures Done']
         fig_surgeon = px.bar(lb_surgeons, x='Surgeon', y='Procedures Done', color='Procedures Done',
@@ -183,7 +182,6 @@ with tabs[3]:
         st.plotly_chart(fig_surgeon, use_container_width=True)
         st.success(f"🏅 Top Surgeon: {lb_surgeons.iloc[0]['Surgeon']}")
 
-        # Staff
         staff_series = df_filtered['staff'].str.split(",").explode().str.strip().dropna()
         lb_staff = staff_series.value_counts().reset_index()
         lb_staff.columns = ["Staff", "Appearances"]
@@ -192,7 +190,6 @@ with tabs[3]:
         st.plotly_chart(fig_staff, use_container_width=True)
         st.success(f"🏅 Top Staff: {lb_staff.iloc[0]['Staff']}")
 
-        # Hospitals
         lb_hospitals = df_filtered['hospital'].value_counts().reset_index()
         lb_hospitals.columns = ["Hospital", "Procedures"]
         fig_hosp = px.bar(lb_hospitals, x="Hospital", y="Procedures", color="Procedures",
@@ -212,11 +209,12 @@ with tabs[4]:
         pdf = canvas.Canvas(buffer)
         pdf.drawString(100, 800, "OrthoPulse Pro Report")
         y = 780
-        for i, row in df_filtered.head(50).iterrows():
-            pdf.drawString(50, y, f"{row['Date'].strftime('%Y-%m-%d')} | {row['hospital']} | {row['procedure']} | {row['surgeon']} | {row['staff']}")
+        for i, row in df_filtered.head(30).iterrows():
+            pdf.drawString(50, y, f"{row['Date'].date()} - {row['hospital']} - {row['procedure']} - {row['surgeon']}")
             y -= 15
         pdf.save()
-        st.download_button("Download PDF", buffer.getvalue(), "report.pdf", "application/pdf")
+        buffer.seek(0)
+        st.download_button("Download PDF", buffer, "report.pdf", "application/pdf")
 
 # ---------------------------
 # Add Procedure Tab
@@ -233,8 +231,16 @@ with tabs[5]:
         notes_input = st.text_area("Notes")
         submitted = st.form_submit_button("Add Procedure")
         if submitted:
-            c.execute('INSERT INTO procedures (date, region, hospital, procedure, surgeon, staff, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                      (date_input.strftime("%Y-%m-%d"), region_input, hospital_input, procedure_input, surgeon_input, staff_input, notes_input))
-            conn.commit()
-            st.success("Procedure added successfully!")
-            st.experimental_rerun()
+            try:
+                c.execute(
+                    'INSERT INTO procedures (date, region, hospital, procedure, surgeon, staff, notes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    (date_input.strftime("%Y-%m-%d"), region_input, hospital_input, procedure_input, surgeon_input, staff_input, notes_input)
+                )
+                conn.commit()
+                st.success("✅ Procedure added successfully!")
+                
+                # Reload Data Safely
+                df_all = pd.read_sql_query("SELECT * FROM procedures", conn)
+                df_all["Date"] = pd.to_datetime(df_all["date"], errors='coerce')
+            except Exception as e:
+                st.error(f"Error adding procedure: {e}")
