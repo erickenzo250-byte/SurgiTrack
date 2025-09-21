@@ -1,11 +1,6 @@
-# ---------------------------
-# OrthoPulse Pro 🦴 - High-End Version
-# ---------------------------
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import numpy as np
 from datetime import datetime, timedelta
 import time
@@ -16,7 +11,6 @@ try:
     has_sklearn = True
 except ImportError:
     has_sklearn = False
-    st.warning("scikit-learn not installed. Forecast feature disabled.")
 
 # ---------------------------
 # Page Config
@@ -61,14 +55,13 @@ def generate_random_procedures(num_records=150):
     
     df = pd.DataFrame(data, columns=["Date","Region","Hospital","Procedure","Surgeon","Staff","Notes"])
     df["Date"] = pd.to_datetime(df["Date"])
-    df["Staff"] = df["Staff"].fillna("")
     return df
 
 # ---------------------------
-# Preload procedures
+# Initialize session state
 # ---------------------------
 if "procedures" not in st.session_state:
-    st.session_state["procedures"] = generate_random_procedures(150)
+    st.session_state["procedures"] = generate_random_procedures()
 
 # ---------------------------
 # Role selection
@@ -103,31 +96,28 @@ elif role == "Staff" and staff_region:
 # Advanced Filters
 # ---------------------------
 st.sidebar.subheader("Filters")
-min_date = df['Date'].min() if not df.empty else datetime.today()
-max_date = df['Date'].max() if not df.empty else datetime.today()
+if not df.empty:
+    min_date = df['Date'].min()
+    max_date = df['Date'].max()
+else:
+    min_date = max_date = datetime.today()
 date_range = st.sidebar.date_input("Date Range", [min_date, max_date])
-proc_types = st.sidebar.multiselect("Procedure Types", df['Procedure'].unique(), default=df['Procedure'].unique())
-hosp_filter = st.sidebar.multiselect("Hospitals", df['Hospital'].unique(), default=df['Hospital'].unique())
-surgeon_filter = st.sidebar.multiselect("Surgeons", df['Surgeon'].unique(), default=df['Surgeon'].unique())
-staff_filter = st.sidebar.multiselect("Staff", list(set(",".join(df['Staff']).split(", "))), default=list(set(",".join(df['Staff']).split(", "))))
+proc_types = st.sidebar.multiselect("Procedure Types", df['Procedure'].unique(), default=df['Procedure'].unique() if not df.empty else [])
+hosp_filter = st.sidebar.multiselect("Hospitals", df['Hospital'].unique(), default=df['Hospital'].unique() if not df.empty else [])
+surgeon_filter = st.sidebar.multiselect("Surgeons", df['Surgeon'].unique(), default=df['Surgeon'].unique() if not df.empty else [])
+staff_filter = st.sidebar.multiselect("Staff", list(set(",".join(df['Staff']).split(", "))) if not df.empty else [], default=list(set(",".join(df['Staff']).split(", "))) if not df.empty else [])
 
-df_filtered = df[
-    (df['Date'] >= pd.to_datetime(date_range[0])) &
-    (df['Date'] <= pd.to_datetime(date_range[1])) &
-    (df['Procedure'].isin(proc_types)) &
-    (df['Hospital'].isin(hosp_filter)) &
-    (df['Surgeon'].isin(surgeon_filter)) &
-    (df['Staff'].apply(lambda x: any(s in x for s in staff_filter)))
-] if not df.empty else pd.DataFrame(columns=df.columns)
-
-# ---------------------------
-# Animated Metric Function
-# ---------------------------
-def animated_metric(label, value):
-    placeholder = st.empty()
-    for i in range(value+1):
-        placeholder.metric(label, i)
-        time.sleep(0.01)
+if not df.empty:
+    df_filtered = df[
+        (df['Date'] >= pd.to_datetime(date_range[0])) &
+        (df['Date'] <= pd.to_datetime(date_range[1])) &
+        (df['Procedure'].isin(proc_types)) &
+        (df['Hospital'].isin(hosp_filter)) &
+        (df['Surgeon'].isin(surgeon_filter)) &
+        (df['Staff'].apply(lambda x: any(s in x for s in staff_filter)))
+    ]
+else:
+    df_filtered = pd.DataFrame(columns=df.columns)
 
 # ---------------------------
 # Tabs
@@ -145,14 +135,13 @@ with tab_metrics:
         st.info("No data available.")
     else:
         col1, col2, col3, col4, col5 = st.columns(5)
-        animated_metric("🟢 Total Cases", len(df_filtered))
-        animated_metric("🔵 Active Surgeons", df_filtered["Surgeon"].nunique())
-        animated_metric("🟡 Staff Coverage", df_filtered["Staff"].str.split(",").explode().str.strip().nunique())
+        col1.metric("🟢 Total Cases", len(df_filtered))
+        col2.metric("🔵 Active Surgeons", df_filtered["Surgeon"].nunique())
+        col3.metric("🟡 Staff Coverage", df_filtered["Staff"].str.split(",").explode().str.strip().nunique())
         top_hospital = df_filtered['Hospital'].value_counts().idxmax()
         top_procedure = df_filtered['Procedure'].value_counts().idxmax()
         col4.metric("🏥 Top Hospital", top_hospital)
         col5.metric("⚕️ Top Procedure", top_procedure)
-        st.info(f"💡 Recommendation: Monitor resources at {top_hospital}, highest number of procedures.")
 
 # ---------------------------
 # Trends Tab
@@ -164,10 +153,10 @@ with tab_trends:
 
     if not df_last_month.empty:
         df_trend = df_last_month.groupby(pd.Grouper(key="Date", freq="W")).size().reset_index(name="Total Procedures")
-        fig_line = px.line(df_trend, x="Date", y="Total Procedures", markers=True, color_discrete_sequence=px.colors.qualitative.Bold)
+        fig_line = px.line(df_trend, x="Date", y="Total Procedures", markers=True)
         st.plotly_chart(fig_line, use_container_width=True)
 
-        # Forecast next week procedures
+        # Forecast
         if has_sklearn and len(df_trend) > 1:
             X = np.arange(len(df_trend)).reshape(-1, 1)
             y = df_trend['Total Procedures'].values
@@ -175,7 +164,7 @@ with tab_trends:
             pred = model.predict([[len(df_trend)]])[0]
             st.success(f"🔮 Forecasted procedures for next week: {int(pred)}")
     else:
-        st.info("No procedures recorded in the last month.")
+        st.info("No procedures in the last month.")
 
 # ---------------------------
 # Leaderboard Tab
@@ -187,14 +176,8 @@ with tab_leaderboard:
     else:
         lb_surgeons = df_filtered['Surgeon'].value_counts().reset_index()
         lb_surgeons.columns = ['Surgeon', 'Procedures Done']
-        fig_surgeon = px.bar(lb_surgeons, x='Surgeon', y='Procedures Done', text='Procedures Done', color='Procedures Done', color_continuous_scale=px.colors.sequential.Viridis)
+        fig_surgeon = px.bar(lb_surgeons, x='Surgeon', y='Procedures Done', text='Procedures Done')
         st.plotly_chart(fig_surgeon, use_container_width=True)
-
-        staff_series = df_filtered['Staff'].str.split(",").explode().str.strip().dropna()
-        lb_staff = staff_series.value_counts().reset_index()
-        lb_staff.columns = ["Staff", "Appearances"]
-        fig_staff = px.pie(lb_staff, names='Staff', values='Appearances', title="Staff Workload Distribution")
-        st.plotly_chart(fig_staff, use_container_width=True)
 
 # ---------------------------
 # Reports Tab
@@ -204,9 +187,6 @@ with tab_reports:
     if not df_filtered.empty:
         csv = df_filtered.to_csv(index=False)
         st.download_button("Download CSV Report", csv, "OrthoPulse_Report.csv", "text/csv")
-        excel = df_filtered.to_excel(index=False, engine='openpyxl')
-        st.download_button("Download Excel Report", excel, "OrthoPulse_Report.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        st.dataframe(df_filtered)
     else:
         st.info("No data to generate report.")
 
