@@ -7,9 +7,10 @@ from datetime import datetime, timedelta
 from sklearn.linear_model import LinearRegression
 from io import BytesIO
 from reportlab.pdfgen import canvas
+import random
 
 # ---------------------------
-# Page Config (line 6 fixed)
+# Page Config
 # ---------------------------
 st.set_page_config(
     page_title="OrthoPulse Pro 🦴",
@@ -17,6 +18,21 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# ---------------------------
+# Tab Hover Pop-up Effect
+# ---------------------------
+st.markdown("""
+<style>
+.css-1aumxhk {
+    transition: all 0.3s ease;
+}
+.css-1aumxhk:hover {
+    transform: scale(1.05);
+    background-color: #f0f8ff !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 st.markdown("<h1 style='text-align:center; color:#4B0082'>OrthoPulse Pro 🦴 Dashboard</h1>", unsafe_allow_html=True)
 
@@ -38,49 +54,85 @@ c.execute('''CREATE TABLE IF NOT EXISTS procedures (
 conn.commit()
 
 # ---------------------------
+# Random Test Data Generator
+# ---------------------------
+def generate_random_procedures(num_records=200):
+    hospitals = ["Nairobi General", "Kijabe Hospital", "Meru County", "Mombasa Central", "Kisii Teaching"]
+    regions = {"Nairobi General": "Nairobi", "Kijabe Hospital": "Western", "Meru County": "Meru",
+               "Mombasa Central": "Coast", "Kisii Teaching": "Kisii"}
+    procedures = ["THA", "TKA", "Hip Revision", "Knee Revision", "Trauma Fixation"]
+    surgeons = ["Dr. Mwangi", "Dr. Kimani", "Dr. Ochieng", "Dr. Wanjiru", "Dr. Njoroge"]
+    staff_members = ["Alice", "Bob", "Charles", "Diana", "Eunice", "Francis"]
+    data = []
+
+    start_date = datetime(datetime.today().year, 1, 1)
+    end_date = datetime.today()
+    delta_days = (end_date - start_date).days
+
+    for _ in range(num_records):
+        date = start_date + timedelta(days=random.randint(0, delta_days))
+        hospital = random.choice(hospitals)
+        region = regions[hospital]
+        procedure = random.choice(procedures)
+        surgeon = random.choice(surgeons)
+        staff = ", ".join(random.sample(staff_members, k=random.randint(1, 3)))
+        notes = "Routine procedure"
+        data.append((date.strftime("%Y-%m-%d"), region, hospital, procedure, surgeon, staff, notes))
+
+    c.executemany('INSERT INTO procedures (date, region, hospital, procedure, surgeon, staff, notes) VALUES (?, ?, ?, ?, ?, ?, ?)', data)
+    conn.commit()
+    st.success(f"✅ Generated {num_records} random test procedures from January.")
+
+# ---------------------------
 # Load Data
 # ---------------------------
 df_all = pd.read_sql_query("SELECT * FROM procedures", conn)
-df_all["Date"] = pd.to_datetime(df_all["date"]) if not df_all.empty else pd.to_datetime([])
+if df_all.empty:
+    generate_random_procedures(200)
+    df_all = pd.read_sql_query("SELECT * FROM procedures", conn)
+df_all["Date"] = pd.to_datetime(df_all["date"])
 
 # ---------------------------
-# Role Selection
+# Sidebar (High-End)
 # ---------------------------
-role = st.sidebar.selectbox("Select Role", ["Admin", "Staff"])
-staff_name = st.sidebar.text_input("Enter Your Name") if role == "Staff" else ""
+st.sidebar.header("👩‍⚕️ OrthoPulse Sidebar")
 
-# ---------------------------
-# Sidebar Filters
-# ---------------------------
-st.sidebar.header("Filters")
-min_date = df_all['Date'].min() if not df_all.empty else datetime.today()
-max_date = df_all['Date'].max() if not df_all.empty else datetime.today()
-date_range = st.sidebar.date_input("Date Range", [min_date, max_date])
+# Role Section
+with st.sidebar.expander("User Role"):
+    role = st.radio("Select Role", ["Admin", "Staff"])
+    staff_name = st.text_input("Enter Your Name") if role == "Staff" else ""
 
-regions = ["All"] + sorted(df_all['region'].dropna().unique().tolist())
-selected_region = st.sidebar.selectbox("Region", regions)
+# Filters Section
+with st.sidebar.expander("Filters 🔍"):
+    min_date = df_all['Date'].min()
+    max_date = df_all['Date'].max()
+    date_range = st.date_input("Date Range", [min_date, max_date], help="Select the date range for analysis")
+    regions = ["All"] + sorted(df_all['region'].dropna().unique().tolist())
+    selected_region = st.selectbox("Region", regions, help="Choose region or All")
+    hospitals = ["All"] + sorted(df_all['hospital'].dropna().unique().tolist())
+    selected_hospital = st.selectbox("Hospital", hospitals, help="Filter by hospital or All")
+    procedures = ["All"] + sorted(df_all['procedure'].dropna().unique().tolist())
+    selected_procedure = st.selectbox("Procedure", procedures, help="Filter by procedure type or All")
+    surgeons = ["All"] + sorted(df_all['surgeon'].dropna().unique().tolist())
+    selected_surgeon = st.selectbox("Surgeon", surgeons, help="Filter by surgeon or All")
+    staff_filter = ["All"] + sorted(set(",".join(df_all['staff'].dropna()).split(", ")))
+    selected_staff = st.selectbox("Staff", staff_filter, help="Filter by staff member or All")
 
-hospitals = ["All"] + sorted(df_all['hospital'].dropna().unique().tolist())
-selected_hospital = st.sidebar.selectbox("Hospital", hospitals)
-
-procedures = ["All"] + sorted(df_all['procedure'].dropna().unique().tolist())
-selected_procedure = st.sidebar.selectbox("Procedure Type", procedures)
-
-surgeons = ["All"] + sorted(df_all['surgeon'].dropna().unique().tolist())
-selected_surgeon = st.sidebar.selectbox("Surgeon", surgeons)
-
-staff_filter = ["All"] + sorted(set(",".join(df_all['staff'].dropna()).split(", ")))
-selected_staff = st.sidebar.selectbox("Staff", staff_filter)
+# Quick Actions Section
+with st.sidebar.expander("Quick Actions ⚡"):
+    if st.button("Generate Random Test Data"):
+        generate_random_procedures(100)
+        st.experimental_rerun()
+    if st.button("Reset Filters"):
+        st.experimental_rerun()
 
 # ---------------------------
 # Data Filtering
 # ---------------------------
 df_filtered = df_all.copy()
-
-if df_filtered.empty == False:
+if not df_filtered.empty:
     df_filtered = df_filtered[(df_filtered['Date'] >= pd.to_datetime(date_range[0])) &
                               (df_filtered['Date'] <= pd.to_datetime(date_range[1]))]
-
     if selected_region != "All":
         df_filtered = df_filtered[df_filtered['region'] == selected_region]
     if selected_hospital != "All":
@@ -126,7 +178,6 @@ with tabs[1]:
         fig_line = px.line(df_trend, x="Date", y="Procedures", markers=True, color_discrete_sequence=["#1E90FF"])
         st.plotly_chart(fig_line, use_container_width=True)
 
-        # Forecast next 7 days using LinearRegression
         if len(df_trend) >= 2:
             df_trend['day_num'] = np.arange(len(df_trend))
             X = df_trend[['day_num']]
@@ -144,9 +195,7 @@ with tabs[1]:
 # ---------------------------
 with tabs[2]:
     st.markdown("### 🏆 Leaderboards")
-    if df_filtered.empty:
-        st.info("No data available.")
-    else:
+    if not df_filtered.empty:
         # Surgeons
         lb_surgeons = df_filtered['surgeon'].value_counts().reset_index()
         lb_surgeons.columns = ['Surgeon', 'Procedures Done']
@@ -178,12 +227,9 @@ with tabs[3]:
         st.info("No data available.")
     else:
         st.dataframe(df_filtered.sort_values("Date", ascending=False))
-
-        # CSV download
         csv = df_filtered.to_csv(index=False)
         st.download_button("Download CSV", csv, "OrthoPulse_Report.csv", "text/csv")
 
-        # PDF download
         def create_pdf(dataframe):
             buffer = BytesIO()
             c = canvas.Canvas(buffer, pagesize=(800,1000))
@@ -199,6 +245,7 @@ with tabs[3]:
             c.save()
             buffer.seek(0)
             return buffer
+
         pdf_file = create_pdf(df_filtered)
         st.download_button("Download PDF", pdf_file, "OrthoPulse_Report.pdf", "application/pdf")
 
