@@ -16,6 +16,7 @@ except ImportError:
 # Page Config
 # ---------------------------
 st.set_page_config(page_title="OrthoPulse Pro 🦴", page_icon="🩺", layout="wide")
+
 st.markdown(
     "<h1 style='text-align: center; color: #4B0082;'>OrthoPulse Pro 🦴 Dashboard</h1>",
     unsafe_allow_html=True
@@ -58,7 +59,7 @@ def generate_random_procedures(num_records=150):
     return df
 
 # ---------------------------
-# Initialize session state
+# Session state init
 # ---------------------------
 if "procedures" not in st.session_state:
     st.session_state["procedures"] = generate_random_procedures()
@@ -93,19 +94,25 @@ elif role == "Staff" and staff_region:
     df = df[df["Region"] == staff_region]
 
 # ---------------------------
-# Advanced Filters
+# Sidebar functions
 # ---------------------------
-st.sidebar.subheader("Filters")
+st.sidebar.header("Advanced Filters & Options")
 if not df.empty:
     min_date = df['Date'].min()
     max_date = df['Date'].max()
 else:
     min_date = max_date = datetime.today()
-date_range = st.sidebar.date_input("Date Range", [min_date, max_date])
+
+date_range = st.sidebar.date_input("Procedure Date Range", [min_date, max_date])
 proc_types = st.sidebar.multiselect("Procedure Types", df['Procedure'].unique(), default=df['Procedure'].unique() if not df.empty else [])
 hosp_filter = st.sidebar.multiselect("Hospitals", df['Hospital'].unique(), default=df['Hospital'].unique() if not df.empty else [])
 surgeon_filter = st.sidebar.multiselect("Surgeons", df['Surgeon'].unique(), default=df['Surgeon'].unique() if not df.empty else [])
 staff_filter = st.sidebar.multiselect("Staff", list(set(",".join(df['Staff']).split(", "))) if not df.empty else [], default=list(set(",".join(df['Staff']).split(", "))) if not df.empty else [])
+
+show_weekly = st.sidebar.checkbox("Show Weekly Trends", value=True)
+show_forecast = st.sidebar.checkbox("Enable Forecast (Next Week)", value=True if has_sklearn else False)
+show_report = st.sidebar.checkbox("Show Full Report Table", value=True)
+show_popups = st.sidebar.checkbox("Enable Tab Pop-ups", value=True)
 
 if not df.empty:
     df_filtered = df[
@@ -123,13 +130,15 @@ else:
 # Tabs
 # ---------------------------
 tab_metrics, tab_trends, tab_leaderboard, tab_reports, tab_add = st.tabs(
-    ["Metrics","Trends","Leaderboard","Reports","Add Procedure"]
+    ["Metrics","Trends","Leaderboards","Reports","Add Procedure"]
 )
 
 # ---------------------------
 # Metrics Tab
 # ---------------------------
 with tab_metrics:
+    if show_popups:
+        st.toast("Viewing Key Metrics", icon="📊")
     st.markdown("### 📊 Key Insights")
     if df_filtered.empty:
         st.info("No data available.")
@@ -147,53 +156,79 @@ with tab_metrics:
 # Trends Tab
 # ---------------------------
 with tab_trends:
-    st.markdown("### 📈 Procedure Trends (Last 1 Month)")
+    if show_popups:
+        st.toast("Viewing Trends", icon="📈")
+    st.markdown("### 📈 Procedure Trends (Last Month)")
     one_month_ago = datetime.today() - timedelta(days=30)
     df_last_month = df_filtered[df_filtered['Date'] >= one_month_ago] if not df_filtered.empty else pd.DataFrame(columns=df_filtered.columns)
 
     if not df_last_month.empty:
-        df_trend = df_last_month.groupby(pd.Grouper(key="Date", freq="W")).size().reset_index(name="Total Procedures")
-        fig_line = px.line(df_trend, x="Date", y="Total Procedures", markers=True)
-        st.plotly_chart(fig_line, use_container_width=True)
-
-        # Forecast
-        if has_sklearn and len(df_trend) > 1:
+        if show_weekly:
+            df_trend = df_last_month.groupby(pd.Grouper(key="Date", freq="W")).size().reset_index(name="Total Procedures")
+            fig_line = px.line(df_trend, x="Date", y="Total Procedures", markers=True)
+            st.plotly_chart(fig_line, use_container_width=True)
+        if show_forecast and has_sklearn and len(df_trend) > 1:
             X = np.arange(len(df_trend)).reshape(-1, 1)
             y = df_trend['Total Procedures'].values
             model = LinearRegression().fit(X, y)
             pred = model.predict([[len(df_trend)]])[0]
-            st.success(f"🔮 Forecasted procedures for next week: {int(pred)}")
+            st.success(f"🔮 Forecasted procedures next week: {int(pred)}")
     else:
         st.info("No procedures in the last month.")
 
 # ---------------------------
-# Leaderboard Tab
+# Leaderboards Tab
 # ---------------------------
 with tab_leaderboard:
-    st.markdown("### 🏆 Leaderboard")
+    if show_popups:
+        st.toast("Viewing Leaderboards", icon="🏆")
+    st.markdown("### 🏆 Leaderboards")
     if df_filtered.empty:
         st.info("No procedures available.")
     else:
+        # Surgeons
         lb_surgeons = df_filtered['Surgeon'].value_counts().reset_index()
         lb_surgeons.columns = ['Surgeon', 'Procedures Done']
+        st.markdown("#### 🥇 Surgeons")
         fig_surgeon = px.bar(lb_surgeons, x='Surgeon', y='Procedures Done', text='Procedures Done')
         st.plotly_chart(fig_surgeon, use_container_width=True)
+
+        # Staff
+        staff_series = df_filtered['Staff'].str.split(",").explode().str.strip().dropna()
+        lb_staff = staff_series.value_counts().reset_index()
+        lb_staff.columns = ["Staff", "Procedures Assisted"]
+        st.markdown("#### 🥈 Staff")
+        fig_staff = px.bar(lb_staff, x="Staff", y="Procedures Assisted", text="Procedures Assisted")
+        st.plotly_chart(fig_staff, use_container_width=True)
+
+        # Hospitals
+        lb_hosp = df_filtered['Hospital'].value_counts().reset_index()
+        lb_hosp.columns = ["Hospital", "Total Procedures"]
+        st.markdown("#### 🏥 Hospitals")
+        fig_hosp = px.bar(lb_hosp, x="Hospital", y="Total Procedures", text="Total Procedures")
+        st.plotly_chart(fig_hosp, use_container_width=True)
 
 # ---------------------------
 # Reports Tab
 # ---------------------------
 with tab_reports:
-    st.markdown("### 📝 Generate Reports")
-    if not df_filtered.empty:
-        csv = df_filtered.to_csv(index=False)
-        st.download_button("Download CSV Report", csv, "OrthoPulse_Report.csv", "text/csv")
+    if show_popups:
+        st.toast("Viewing Reports", icon="📝")
+    st.markdown("### 📝 Full Report")
+    if df_filtered.empty:
+        st.info("No data available.")
     else:
-        st.info("No data to generate report.")
+        if show_report:
+            st.dataframe(df_filtered.sort_values("Date", ascending=False))
+        csv = df_filtered.to_csv(index=False)
+        st.download_button("Download CSV", csv, "OrthoPulse_Report.csv", "text/csv")
 
 # ---------------------------
 # Add Procedure Tab
 # ---------------------------
 with tab_add:
+    if show_popups:
+        st.toast("Add New Procedure", icon="➕")
     st.markdown("### ➕ Add Procedure")
     with st.form("add_proc_form"):
         date = st.date_input("Procedure Date", datetime.today())
