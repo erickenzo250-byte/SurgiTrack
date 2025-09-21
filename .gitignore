@@ -5,6 +5,7 @@ __pycache__/
 .env
 .venv/
 venv/
-*.db
+database.db
 .DS_Store
-*.xlsx
+*.csv
+*.pdf
