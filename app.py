@@ -1,5 +1,5 @@
 # ---------------------------
-# app.py - Ortho Tracker Pro
+# app.py - OrthoPulse (Sophisticated Ortho Tracker)
 # ---------------------------
 import streamlit as st
 import pandas as pd
@@ -12,8 +12,8 @@ import time
 # ---------------------------
 # Page Config
 # ---------------------------
-st.set_page_config(page_title="🦴 Ortho Tracker Pro", page_icon="🩺", layout="wide")
-st.markdown("<h1 style='text-align: center; color: #4B0082;'>🦴 Ortho Tracker Pro Dashboard</h1>", unsafe_allow_html=True)
+st.set_page_config(page_title="OrthoPulse 🦴", page_icon="🩺", layout="wide")
+st.markdown("<h1 style='text-align: center; color: #4B0082;'>OrthoPulse 🦴 Dashboard</h1>", unsafe_allow_html=True)
 
 # ---------------------------
 # Hospital -> Region mapping
@@ -109,18 +109,6 @@ df_filtered = df[
 ]
 
 # ---------------------------
-# Animated Metric
-# ---------------------------
-def animated_metric(label, value, change=None):
-    placeholder = st.empty()
-    for i in range(value + 1):
-        if change:
-            placeholder.metric(label, i, delta=f"{change:+}")
-        else:
-            placeholder.metric(label, i)
-        time.sleep(0.01)
-
-# ---------------------------
 # Toast-style Notification
 # ---------------------------
 def toast_alert(message, alert_type="info", duration=5):
@@ -132,7 +120,6 @@ def toast_alert(message, alert_type="info", duration=5):
     else:
         placeholder.info(message)
     
-    # Auto-remove
     def remove_after_delay(ph, dur):
         time.sleep(dur)
         ph.empty()
@@ -154,40 +141,31 @@ with tab_metrics:
     if df_filtered.empty:
         st.info("No data available.")
     else:
-        # Total cases
-        last_30_days = datetime.today() - timedelta(days=30)
-        prev_df = df_all[df_all['Date'] < last_30_days]
-        prev_count = len(prev_df)
-        change_cases = len(df_filtered) - prev_count
-        animated_metric("🟢 Total Cases (last 90 days)", len(df_filtered), change=change_cases)
-
-        # Surgeons
+        # KPIs
+        total_cases = len(df_filtered)
         total_surgeons = df_filtered["Surgeon"].nunique()
-        animated_metric("🔵 Active Surgeons", total_surgeons)
-
-        # Staff coverage
         staff_count = df_filtered["Staff"].str.split(",").explode().str.strip().nunique()
-        animated_metric("🟡 Staff Coverage", staff_count)
-
-        # Top hospitals & procedures
         top_hospitals = df_filtered['Hospital'].value_counts().head(3)
-        st.bar_chart(top_hospitals)
-        st.info(f"🏥 Top Hospitals: {', '.join(top_hospitals.index.tolist())}")
         top_procs = df_filtered['Procedure'].value_counts().head(3)
-        st.bar_chart(top_procs)
-        st.info(f"⚕️ Top Procedures: {', '.join(top_procs.index.tolist())}")
 
-        # Smart Recommendations
-        st.markdown("<h3 style='color: #8B0000;'>💡 Recommendations</h3>", unsafe_allow_html=True)
-        staff_series = df_filtered['Staff'].str.split(",").explode().str.strip().value_counts()
-        overloaded_staff = staff_series[staff_series > 5]
-        if not overloaded_staff.empty:
-            toast_alert(f"⚠️ Staff Overload Alert: {', '.join(overloaded_staff.index.tolist())} handling many procedures!", "warning", 7)
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("🟢 Total Cases", total_cases)
+        col2.metric("🔵 Active Surgeons", total_surgeons)
+        col3.metric("🟡 Staff Coverage", staff_count)
+        col4.metric("🏥 Top Hospitals", ", ".join(top_hospitals.index.tolist()))
+        col5.metric("⚕️ Top Procedures", ", ".join(top_procs.index.tolist()))
 
-        hosp_counts = df_filtered['Hospital'].value_counts()
-        high_load_hosp = hosp_counts[hosp_counts > hosp_counts.mean() + hosp_counts.std()]
-        if not high_load_hosp.empty:
-            toast_alert(f"🏥 High Procedure Load: {', '.join(high_load_hosp.index.tolist())}. Allocate resources.", "warning", 7)
+        # Smart Recommendations (Admin)
+        if role == "Admin":
+            staff_series = df_filtered['Staff'].str.split(",").explode().str.strip().value_counts()
+            overloaded_staff = staff_series[staff_series > 5]
+            if not overloaded_staff.empty:
+                toast_alert(f"⚠️ Staff Overload: {', '.join(overloaded_staff.index.tolist())}!", "warning", 7)
+
+            hosp_counts = df_filtered['Hospital'].value_counts()
+            high_load_hosp = hosp_counts[hosp_counts > hosp_counts.mean() + hosp_counts.std()]
+            if not high_load_hosp.empty:
+                toast_alert(f"🏥 High Procedure Load: {', '.join(high_load_hosp.index.tolist())}", "warning", 7)
 
 # ---------------------------
 # Trends Tab
@@ -195,49 +173,32 @@ with tab_metrics:
 with tab_trends:
     st.markdown("<h2 style='text-align: center; color: #1E90FF;'>📈 Procedure Trends</h2>", unsafe_allow_html=True)
     if not df_filtered.empty:
-        # Weekly trend
         df_trend = df_filtered.groupby([pd.Grouper(key="Date", freq="W"), "Procedure"]).size().reset_index(name="Count")
-        fig_line = px.line(df_trend, x="Date", y="Count", color="Procedure",
-                           markers=True, color_discrete_sequence=px.colors.qualitative.Bold)
-        fig_line.update_traces(hovertemplate="<b>%{y} procedures</b> in %{x} for %{color}")
+        fig_line = px.line(df_trend, x="Date", y="Count", color="Procedure", markers=True)
         st.plotly_chart(fig_line, use_container_width=True)
-
-        # Cumulative trend
-        df_cum = df_filtered.groupby("Date").size().cumsum().reset_index(name="Cumulative")
-        fig_cum = px.line(df_cum, x="Date", y="Cumulative", title="Cumulative Procedures")
-        st.plotly_chart(fig_cum, use_container_width=True)
 
 # ---------------------------
 # Leaderboard Tab
 # ---------------------------
 with tab_leaderboard:
     st.markdown("<h2 style='text-align: center; color: #FF8C00;'>🏆 Leaderboard</h2>", unsafe_allow_html=True)
-    if role == "Admin":
-        if df_all.empty:
-            st.info("No procedures recorded yet.")
-        else:
-            lb_surgeons = df_all['Surgeon'].value_counts().reset_index()
-            lb_surgeons.columns = ['Surgeon', 'Procedures Done']
-            lb_surgeons['Efficiency'] = lb_surgeons['Procedures Done'] / lb_surgeons['Procedures Done'].sum() * 100
-            fig_surgeon = px.bar(lb_surgeons, x='Surgeon', y='Procedures Done', text='Procedures Done',
-                                 color='Efficiency', color_continuous_scale=px.colors.sequential.Viridis)
-            st.plotly_chart(fig_surgeon, use_container_width=True)
-            st.success(f"🏅 Top Surgeon: {lb_surgeons.iloc[0]['Surgeon']}")
+    if role == "Admin" and not df_all.empty:
+        lb_surgeons = df_all['Surgeon'].value_counts().reset_index()
+        lb_surgeons.columns = ['Surgeon', 'Procedures Done']
+        fig_surgeon = px.bar(lb_surgeons, x='Surgeon', y='Procedures Done', text='Procedures Done')
+        st.plotly_chart(fig_surgeon, use_container_width=True)
 
-            staff_series = df_all['Staff'].str.split(",").explode().str.strip().dropna()
-            lb_staff = staff_series.value_counts().reset_index()
-            lb_staff.columns = ["Staff", "Appearances"]
-            fig_staff = px.bar(lb_staff, x="Staff", y="Appearances", text="Appearances",
-                               color="Appearances", color_continuous_scale=px.colors.sequential.Plasma)
-            st.plotly_chart(fig_staff, use_container_width=True)
-            st.success(f"🏅 Top Staff: {lb_staff.iloc[0]['Staff']}")
+        staff_series = df_all['Staff'].str.split(",").explode().str.strip().dropna()
+        lb_staff = staff_series.value_counts().reset_index()
+        lb_staff.columns = ["Staff", "Appearances"]
+        fig_staff = px.bar(lb_staff, x="Staff", y="Appearances", text="Appearances")
+        st.plotly_chart(fig_staff, use_container_width=True)
 
 # ---------------------------
 # Reports Tab
 # ---------------------------
 with tab_reports:
     st.markdown("<h2 style='text-align: center; color: #4B0082;'>🗂 Reports</h2>", unsafe_allow_html=True)
-    st.write("Download filtered procedures:")
     st.download_button("📥 Download CSV", df_filtered.to_csv(index=False), "ortho_procedures.csv", "text/csv")
 
 # ---------------------------
@@ -257,4 +218,4 @@ with tab_add:
             new_row = pd.DataFrame([[date, hospital_region_map[hospital], hospital, procedure, surgeon, staff, notes]],
                                    columns=df_all.columns)
             st.session_state["procedures"] = pd.concat([st.session_state["procedures"], new_row], ignore_index=True)
-            st.success("✅ Procedure added successfully!")
+            toast_alert("✅ Procedure added successfully!", "success", 5)
