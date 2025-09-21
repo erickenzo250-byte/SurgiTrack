@@ -1,13 +1,14 @@
 # ---------------------------
-# app.py - OrthoPulse Pro (Cool & Interactive)
+# app.py - OrthoPulse Pro
 # ---------------------------
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import random
 from datetime import datetime, timedelta
-import threading
-import time
+import threading, time
+import numpy as np
+from sklearn.linear_model import LinearRegression
 
 # ---------------------------
 # Page Config
@@ -138,7 +139,6 @@ with tab_metrics:
     if df_filtered.empty:
         st.info("No data available.")
     else:
-        # Animated KPIs
         total_cases = len(df_filtered)
         total_surgeons = df_filtered["Surgeon"].nunique()
         staff_count = df_filtered["Staff"].str.split(",").explode().str.strip().nunique()
@@ -152,51 +152,101 @@ with tab_metrics:
         col4.metric("🏥 Top Hospitals", ", ".join(top_hospitals.index.tolist()))
         col5.metric("⚕️ Top Procedures", ", ".join(top_procs.index.tolist()))
 
+        # Weekly Summary
+        last_week = datetime.today() - timedelta(days=7)
+        df_week = df_filtered[df_filtered['Date'] >= last_week]
+        total_week = len(df_week)
+        top_hosp_week = df_week['Hospital'].value_counts().idxmax() if not df_week.empty else "N/A"
+        top_surgeon_week = df_week['Surgeon'].value_counts().idxmax() if not df_week.empty else "N/A"
+
+        col6, col7, col8 = st.columns(3)
+        col6.metric("🗓 Total Procedures (Last Week)", total_week)
+        col7.metric("🏥 Top Hospital (Last Week)", top_hosp_week)
+        col8.metric("⚕️ Top Surgeon (Last Week)", top_surgeon_week)
+
         # Smart Alerts
         if role == "Admin":
-            # Overworked staff
             staff_counts = df_filtered['Staff'].str.split(",").explode().value_counts()
             overworked = staff_counts[staff_counts > staff_counts.mean() + staff_counts.std()]
             if not overworked.empty:
                 toast_alert(f"⚠️ Overworked Staff: {', '.join(overworked.index.tolist())}", "warning", 7)
-            
-            # Hospitals exceeding avg load
+
             hosp_counts = df_filtered['Hospital'].value_counts()
             high_load_hosp = hosp_counts[hosp_counts > hosp_counts.mean() + hosp_counts.std()]
             if not high_load_hosp.empty:
                 toast_alert(f"🏥 High Procedure Load: {', '.join(high_load_hosp.index.tolist())}", "warning", 7)
 
 # ---------------------------
-# Trends Tab
+# Trends Tab (Last 1 Month, Total Procedures)
 # ---------------------------
 with tab_trends:
-    st.markdown("<h2 style='text-align: center; color: #1E90FF;'>📈 Procedure Trends</h2>", unsafe_allow_html=True)
-    if not df_filtered.empty:
-        df_trend = df_filtered.groupby([pd.Grouper(key="Date", freq="W"), "Procedure"]).size().reset_index(name="Count")
-        df_trend['SMA_3'] = df_trend.groupby('Procedure')['Count'].transform(lambda x: x.rolling(3, min_periods=1).mean())
-        fig_line = px.line(df_trend, x="Date", y="SMA_3", color="Procedure", markers=True,
-                           title="Procedure Trends (3-week SMA)",
-                           color_discrete_sequence=px.colors.qualitative.Bold)
+    st.markdown("<h2 style='text-align: center; color: #1E90FF;'>📈 Procedure Trends (Last 1 Month)</h2>", unsafe_allow_html=True)
+    one_month_ago = datetime.today() - timedelta(days=30)
+    df_last_month = df_filtered[df_filtered['Date'] >= one_month_ago]
+
+    if not df_last_month.empty:
+        # Total procedures per week
+        df_trend = df_last_month.groupby(pd.Grouper(key="Date", freq="W")).size().reset_index(name="Total Procedures")
+        df_trend = df_trend.sort_values("Date")
+
+        fig_line = px.line(df_trend, x="Date", y="Total Procedures", markers=True,
+                           title="Total Procedures per Week (Last 1 Month)", color_discrete_sequence=["#1f77b4"])
         st.plotly_chart(fig_line, use_container_width=True)
 
-        # Pie chart for procedure distribution
-        df_proc = df_filtered['Procedure'].value_counts().reset_index()
-        df_proc.columns = ['Procedure', 'Count']
-        st.subheader("📊 Procedure Distribution")
-        fig_pie = px.pie(df_proc, names='Procedure', values='Count', color_discrete_sequence=px.colors.sequential.Viridis)
-        st.plotly_chart(fig_pie, use_container_width=True)
+        # Most Active Staff
+        staff_counts = df_last_month['Staff'].str.split(",").explode().str.strip().value_counts().head(5)
+        st.subheader("🧑‍⚕️ Most Active Staff (Last Month)")
+        st.bar_chart(staff_counts)
+
+        # Procedure Type Distribution
+        proc_counts = df_last_month['Procedure'].value_counts()
+        st.subheader("📊 Procedure Distribution (Last Month)")
+        st.pie_chart(proc_counts)
+
+        # Surgeon Performance Over Time
+        surgeon_weekly = df_last_month.groupby([pd.Grouper(key="Date", freq="W"), "Surgeon"]).size().reset_index(name="Count")
+        fig_surgeon = px.line(surgeon_weekly, x="Date", y="Count", color="Surgeon", markers=True, title="Surgeon Weekly Activity")
+        st.plotly_chart(fig_surgeon, use_container_width=True)
+
+        # Hospital Share Donut
+        hosp_counts = df_last_month['Hospital'].value_counts()
+        fig_hosp = px.pie(values=hosp_counts.values, names=hosp_counts.index, hole=0.5, title="Hospital Procedure Share (Last Month)")
+        st.plotly_chart(fig_hosp, use_container_width=True)
+
+        # Procedure Forecast (Next Week)
+        weekly_total = df_last_month.groupby(pd.Grouper(key="Date", freq="W")).size().reset_index(name="Total")
+        weekly_total['Week_Number'] = np.arange(len(weekly_total))
+        if len(weekly_total) >= 2:
+            model = LinearRegression()
+            model.fit(weekly_total[['Week_Number']], weekly_total['Total'])
+            next_week = model.predict([[weekly_total['Week_Number'].max() + 1]])[0]
+            st.info(f"📈 Predicted total procedures for next week: {int(next_week)}")
+
+        # Trend Comparison
+        compare_hospitals = st.multiselect("Compare Hospitals", df_last_month['Hospital'].unique())
+        if compare_hospitals:
+            compare_df = df_last_month[df_last_month['Hospital'].isin(compare_hospitals)]
+            compare_trend = compare_df.groupby([pd.Grouper(key="Date", freq="W"), "Hospital"]).size().reset_index(name="Total")
+            fig_compare = px.line(compare_trend, x="Date", y="Total", color="Hospital", markers=True, title="Hospital Comparison Trend")
+            st.plotly_chart(fig_compare, use_container_width=True)
+    else:
+        st.info("No procedures recorded in the last month.")
 
 # ---------------------------
 # Leaderboard Tab
 # ---------------------------
 with tab_leaderboard:
     st.markdown("<h2 style='text-align: center; color: #FF8C00;'>🏆 Leaderboard</h2>", unsafe_allow_html=True)
-    if role == "Admin" and not df_all.empty:
+    if df_all.empty:
+        st.info("No procedures recorded yet.")
+    else:
         lb_surgeons = df_all['Surgeon'].value_counts().reset_index()
         lb_surgeons.columns = ['Surgeon', 'Procedures Done']
         fig_surgeon = px.bar(lb_surgeons, x='Surgeon', y='Procedures Done', text='Procedures Done',
                              color='Procedures Done', color_continuous_scale=px.colors.sequential.Viridis)
         st.plotly_chart(fig_surgeon, use_container_width=True)
+        top_surgeon = lb_surgeons.iloc[0]['Surgeon']
+        st.success(f"🏅 Top Surgeon: {top_surgeon}")
 
         staff_series = df_all['Staff'].str.split(",").explode().str.strip().dropna()
         lb_staff = staff_series.value_counts().reset_index()
@@ -204,6 +254,8 @@ with tab_leaderboard:
         fig_staff = px.bar(lb_staff, x="Staff", y="Appearances", text="Appearances",
                            color="Appearances", color_continuous_scale=px.colors.sequential.Plasma)
         st.plotly_chart(fig_staff, use_container_width=True)
+        top_staff = lb_staff.iloc[0]["Staff"]
+        st.success(f"🏅 Top Staff: {top_staff}")
 
 # ---------------------------
 # Reports Tab
