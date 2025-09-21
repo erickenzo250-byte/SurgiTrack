@@ -1,19 +1,35 @@
-# OrthoPulse Pro 🦴
+# 🦴 OrthoPulse Pro 2.0
 
-**OrthoPulse Pro** is a high-end, interactive orthopedic procedure tracking dashboard built with Streamlit. It provides:
+**OrthoPulse Pro 2.0** is a high-end Streamlit dashboard for orthopedic teams to track procedures, staff performance, and hospital metrics.  
 
-- Metrics, trends, and leaderboards for surgeons, staff, and hospitals
-- Forecasting of procedures for the next 7 days
-- Dynamic filters and role-based access (Admin / Staff)
-- Add new procedures with form submission
-- Reports export as CSV or PDF
-- Random test data generator (from January to today)
+---
+
+## **Features**
+
+- Role-based access: Admin & Staff
+- Interactive KPIs & metrics
+- Monthly trend charts with linear regression prediction
+- Leaderboards: Surgeons & Staff
+- Reports: CSV & PDF download
+- Add Procedure functionality
+- Advanced filtering: Date, Region, Hospital, Procedure, Surgeon, Staff
+- Dark/Light theme toggle
+- Pop-up tabs with animated metrics
+- Random test data from January to today
+
+---
+
+## **Default Staff & Regions**
+
+**Staff:** Josephine, Carol, Jacob, Naomi, Charity, Kevin, Miriam, Brian, James, Faith, Geoffrey, Spencer, Evans, Eric  
+**Regions/Hospitals:** Eldoret General, Nairobi/Kijabe (Nairobi General, Kijabe Hospital), Meru County, Mombasa Central
 
 ---
 
 ## **Installation**
 
-1. Clone the repository:
+1. Clone this repo:
+
 ```bash
-git clone https://github.com/yourusername/OrthoPulsePro.git
-cd OrthoPulsePro
+git clone https://github.com/yourusername/OrthoPulse-Pro.git
+cd OrthoPulse-Pro
