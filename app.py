@@ -1,5 +1,5 @@
 # ---------------------------
-# app.py - OrthoPulse (Sophisticated Ortho Tracker)
+# app.py - OrthoPulse (Full Sophisticated Version)
 # ---------------------------
 import streamlit as st
 import pandas as pd
@@ -155,14 +155,25 @@ with tab_metrics:
         col4.metric("🏥 Top Hospitals", ", ".join(top_hospitals.index.tolist()))
         col5.metric("⚕️ Top Procedures", ", ".join(top_procs.index.tolist()))
 
-        # Smart Recommendations (Admin)
+        # Advanced Insights
+        st.subheader("🏥 Hospital Performance Scores")
+        hosp_counts = df_filtered['Hospital'].value_counts()
+        hosp_score = ((hosp_counts - hosp_counts.min()) / (hosp_counts.max() - hosp_counts.min()) * 100).round(1)
+        st.dataframe(hosp_score.reset_index().rename(columns={'index':'Hospital', 'Hospital':'Score (%)'}))
+
+        st.subheader("🧑‍⚕️ Staff Workload Heatmap")
+        df_staff = df_filtered.copy()
+        df_staff = df_staff.assign(Staff=df_staff['Staff'].str.split(",")).explode('Staff')
+        df_staff['Weekday'] = df_staff['Date'].dt.day_name()
+        staff_heatmap = pd.crosstab(df_staff['Staff'], df_staff['Weekday'])
+        fig_heatmap = px.imshow(staff_heatmap, text_auto=True, color_continuous_scale='YlOrRd')
+        st.plotly_chart(fig_heatmap, use_container_width=True)
+
+        # Smart alerts
         if role == "Admin":
-            staff_series = df_filtered['Staff'].str.split(",").explode().str.strip().value_counts()
-            overloaded_staff = staff_series[staff_series > 5]
+            overloaded_staff = df_staff['Staff'].value_counts()[df_staff['Staff'].value_counts() > 5]
             if not overloaded_staff.empty:
                 toast_alert(f"⚠️ Staff Overload: {', '.join(overloaded_staff.index.tolist())}!", "warning", 7)
-
-            hosp_counts = df_filtered['Hospital'].value_counts()
             high_load_hosp = hosp_counts[hosp_counts > hosp_counts.mean() + hosp_counts.std()]
             if not high_load_hosp.empty:
                 toast_alert(f"🏥 High Procedure Load: {', '.join(high_load_hosp.index.tolist())}", "warning", 7)
@@ -174,7 +185,8 @@ with tab_trends:
     st.markdown("<h2 style='text-align: center; color: #1E90FF;'>📈 Procedure Trends</h2>", unsafe_allow_html=True)
     if not df_filtered.empty:
         df_trend = df_filtered.groupby([pd.Grouper(key="Date", freq="W"), "Procedure"]).size().reset_index(name="Count")
-        fig_line = px.line(df_trend, x="Date", y="Count", color="Procedure", markers=True)
+        df_trend['SMA_3'] = df_trend.groupby('Procedure')['Count'].transform(lambda x: x.rolling(3, min_periods=1).mean())
+        fig_line = px.line(df_trend, x="Date", y="SMA_3", color="Procedure", markers=True, title="Procedure Trends (3-week SMA)")
         st.plotly_chart(fig_line, use_container_width=True)
 
 # ---------------------------
@@ -193,6 +205,12 @@ with tab_leaderboard:
         lb_staff.columns = ["Staff", "Appearances"]
         fig_staff = px.bar(lb_staff, x="Staff", y="Appearances", text="Appearances")
         st.plotly_chart(fig_staff, use_container_width=True)
+
+        # Weekly average per surgeon
+        df_surgeons = df_all.groupby(['Surgeon', pd.Grouper(key='Date', freq='W')]).size().reset_index(name='Count')
+        df_surgeons_avg = df_surgeons.groupby('Surgeon')['Count'].mean().sort_values(ascending=False).round(1)
+        st.subheader("⚕️ Surgeons Weekly Average")
+        st.dataframe(df_surgeons_avg.reset_index().rename(columns={'Count':'Avg Procedures/Week'}))
 
 # ---------------------------
 # Reports Tab
